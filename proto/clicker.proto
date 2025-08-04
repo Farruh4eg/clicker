@@ -1,23 +1,68 @@
 syntax = "proto3";
+
+package clicker;
+
 option go_package = "clicker/gen/proto";
+
+service GameService {
+  rpc PlayGame(stream ClientToServer) returns (stream ServerToClient);
+}
 
 message Player {
   int64 id = 1;
-  double attack_damage = 2;
+  string name = 2;
+  double attack_damage = 3;
 }
 
 message Enemy {
   int64 id = 1;
   string name = 2;
-  double hp = 3;
-  optional bytes image = 4;
+  double max_hp = 3;
+  double current_hp = 4;
+  optional bytes image = 5;
 }
 
-message PerformedAction {
+message ClientToServer {
+  Player self_info = 1;
+
+  oneof event {
+    AttackAction attack = 2;
+  }
+}
+
+message AttackAction {
+  // TODO: maybe something additional?
+}
+
+message ServerToClient {
+  InitialState initial_state = 1;
+
+  GameStateUpdate game_state_update = 2;
+
+  PlayerJoined player_joined = 3;
+  PlayerLeft player_left = 4;
+}
+
+message InitialState {
+  Enemy enemy = 1;
+  repeated Player players = 2;
+}
+
+message GameStateUpdate {
+  int64 enemy_id = 1;
+  double enemy_current_hp = 2;
+  optional HitInfo last_hit = 3;
+}
+
+message HitInfo {
+  int64 attacker_id = 1;
+  double damage_dealt = 2;
+}
+
+message PlayerJoined {
   Player player = 1;
-  PlayerAction action = 2;
 }
 
-enum PlayerAction {
-  PLAYER_ACTION_ATTACK = 0;
+message PlayerLeft {
+  int64 player_id = 1;
 }
