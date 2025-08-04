@@ -1,0 +1,23 @@
+syntax = "proto3";
+option go_package = "clicker/gen/proto";
+
+message Player {
+  int64 id = 1;
+  double attack_damage = 2;
+}
+
+message Enemy {
+  int64 id = 1;
+  string name = 2;
+  double hp = 3;
+  optional bytes image = 4;
+}
+
+message PerformedAction {
+  Player player = 1;
+  PlayerAction action = 2;
+}
+
+enum PlayerAction {
+  PLAYER_ACTION_ATTACK = 0;
+}
