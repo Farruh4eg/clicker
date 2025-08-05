@@ -1,15 +1,28 @@
 package main
 
 import (
+	pb "clicker/gen/proto"
 	"fmt"
 	"image"
+	"log"
+	"net"
 	"sync"
+
+	"google.golang.org/grpc"
 )
 
 type Game struct {
 	sync.Mutex
 	LastEnemyID int64
 	enemies     []*Enemy
+}
+
+type GameServer struct {
+	pb.UnimplementedGameServiceServer
+}
+
+func (gs *GameServer) PlayGame(pb.GameService_PlayGameServer) (*pb.ServerToClient, error) {
+	return nil, nil
 }
 
 func NewGame() *Game {
@@ -45,6 +58,17 @@ func (g *Game) CreateEnemy() *Enemy {
 }
 
 func main() {
+	lis, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		log.Fatalf("Could not start listening on port :8080")
+	}
+
+	gameServer := &GameServer{}
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterGameServiceServer(grpcServer, gameServer)
+	grpcServer.Serve(lis)
+
 	game := NewGame()
 
 	var wg sync.WaitGroup
