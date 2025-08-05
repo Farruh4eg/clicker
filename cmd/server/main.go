@@ -4,6 +4,7 @@ import (
 	pb "clicker/gen/proto"
 	"fmt"
 	"image"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -21,8 +22,19 @@ type GameServer struct {
 	pb.UnimplementedGameServiceServer
 }
 
-func (gs *GameServer) PlayGame(pb.GameService_PlayGameServer) (*pb.ServerToClient, error) {
-	return nil, nil
+func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Received some shit:", in.GetSelfInfo().Name)
+	}
 }
 
 func NewGame() *Game {
@@ -58,17 +70,6 @@ func (g *Game) CreateEnemy() *Enemy {
 }
 
 func main() {
-	lis, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		log.Fatalf("Could not start listening on port :8080")
-	}
-
-	gameServer := &GameServer{}
-	var opts []grpc.ServerOption
-	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterGameServiceServer(grpcServer, gameServer)
-	grpcServer.Serve(lis)
-
 	game := NewGame()
 
 	var wg sync.WaitGroup
@@ -88,4 +89,15 @@ func main() {
 		fmt.Printf("Враг ID: %d\n", e.ID)
 	}
 	game.Unlock()
+
+	lis, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		log.Fatalf("Could not start listening on port :8080")
+	}
+
+	gameServer := &GameServer{}
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterGameServiceServer(grpcServer, gameServer)
+	grpcServer.Serve(lis)
 }
