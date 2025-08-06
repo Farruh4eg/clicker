@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
+	"time"
 
 	pb "clicker/gen/proto"
 
@@ -12,42 +12,86 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/widget"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
+type ClickerApp struct {
+	stream pb.GameService_PlayGameClient
+	player *pb.Player
+}
+
 func main() {
-	a := app.New()
-	w := a.NewWindow("clicker")
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
 
-	w.Resize(fyne.NewSize(600, 400))
-	w.SetContent(widget.NewButton("Attack", func() {
-		fmt.Println("you attacked, bozo")
-	}))
-
-	var opts []grpc.DialOption
-
-	conn, err := grpc.NewClient(":8080", opts...)
+	conn, err := grpc.NewClient(":32228", opts...)
 	if err != nil {
 		log.Fatalf("Could not connect to server: %v", err)
 	}
+	fmt.Println("Successfully connected to grpc server ", conn.GetState())
 
 	defer conn.Close()
 
 	client := pb.NewGameServiceClient(conn)
-	stream, err := client.PlayGame(context.Background())
-	waitc := make(chan struct{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+
+	stream, err := client.PlayGame(ctx)
+	if err != nil {
+		log.Fatalf("Failed to start game stream: %v", err)
+	}
+	log.Println("Game has started")
+
+	myPlayer := &pb.Player{Id: 1, Name: "Farruh4eg", AttackDamage: 2.0}
+	appState := &ClickerApp{
+		stream: stream, player: myPlayer,
+	}
+
+	err = stream.Send(&pb.ClientToServer{
+		SelfInfo: myPlayer,
+	})
+	if err != nil {
+		log.Fatalf("Could not send self info to server: %v", err)
+	}
+	log.Println("Sent self info to server")
+
 	go func() {
 		for {
 			in, err := stream.Recv()
-			if err == io.EOF {
-				close(waitc)
+			if err != nil {
+				log.Printf("Failed to receive : %v", err)
 				return
 			}
-			if err != nil {
-				log.Fatalf("Failed to receive : %v", err)
-			}
 			log.Printf("Got a message from server: %v", in.GetInitialState())
+			if update := in.GetGameStateUpdate(); update != nil {
+				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, Last Attacker ID = %d", update.GetEnemyCurrentHp(), update.LastHit.GetAttackerId())
+			}
+			if initState := in.GetInitialState(); initState != nil {
+				log.Printf("INITIAL STATE: Boss Name = %s, HP = %.2f", initState.GetEnemy().Name, initState.Enemy.GetMaxHp())
+			}
 		}
 	}()
 
+	a := app.New()
+	w := a.NewWindow("clicker")
+
+	w.Resize(fyne.NewSize(600, 400))
+	attackButton := widget.NewButton("Attack", func() {
+		log.Println("Attacking now!")
+
+		err := appState.stream.Send(&pb.ClientToServer{
+			Event: &pb.ClientToServer_Attack{
+				Attack: &pb.AttackAction{},
+			},
+		})
+		if err != nil {
+			log.Printf("Could not send attack: %v", err)
+		}
+	})
+	w.SetContent(attackButton)
+
 	w.ShowAndRun()
+	log.Println("Application shutting down")
 }

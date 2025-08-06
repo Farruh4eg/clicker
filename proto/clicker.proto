@@ -23,7 +23,7 @@ message Enemy {
 }
 
 message ClientToServer {
-  Player self_info = 1;
+  optional Player self_info = 1;
 
   oneof event {
     AttackAction attack = 2;
