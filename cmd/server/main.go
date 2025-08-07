@@ -88,6 +88,21 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 	}()
 
 	// TODO: send init state to player
+	currentEnemy := gs.game.enemies[0]
+	initState := &pb.ServerToClient{
+		InitialState: &pb.InitialState{
+			Enemy: &pb.Enemy{
+				Id:        currentEnemy.ID,
+				Name:      currentEnemy.Name,
+				MaxHp:     currentEnemy.MaxHealth,
+				CurrentHp: currentEnemy.CurrentHealth,
+				Image:     nil,
+			},
+		},
+	}
+
+	updatesChan <- initState
+	log.Println("Initial state sent?")
 
 	for {
 		req, err := stream.Recv()
@@ -99,6 +114,20 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 
 		case *pb.ClientToServer_Attack:
 			log.Printf("Player %s attacked", player.GetName())
+
+			gs.game.ApplyDamage(currentEnemy.ID, player.GetAttackDamage())
+			hitInfo := &pb.HitInfo{
+				AttackerId:  player.GetId(),
+				DamageDealt: player.GetAttackDamage(),
+			}
+			serverUpdate := &pb.ServerToClient{
+				GameStateUpdate: &pb.GameStateUpdate{
+					EnemyCurrentHp: currentEnemy.CurrentHealth,
+					EnemyId:        currentEnemy.ID,
+					LastHit:        hitInfo,
+				},
+			}
+			gs.game.Broadcast(serverUpdate)
 
 		default:
 			log.Printf("Received unhandled event type %T from player %d", event, player.GetId())
@@ -119,6 +148,23 @@ type Enemy struct {
 	MaxHealth     float64
 	CurrentHealth float64
 	Image         image.Image
+	// some fine grained mutex for future generations, maybe
+	// sync.Mutex
+}
+
+func (g *Game) ApplyDamage(enemyID int64, incomingDamage float64) (*Enemy, error) {
+	g.Lock()
+	defer g.Unlock()
+	// calculate enemy armor and resistance values here in future maybe?
+	// just substract damage for now
+	// also, TODO: find enemy by id
+	enemy := g.enemies[0]
+	enemy.CurrentHealth -= incomingDamage
+
+	if enemy.CurrentHealth <= 0 {
+		// TODO: destroy the enemy, spawn a new one, award xp, gold, hot wife
+	}
+	return enemy, nil
 }
 
 func (g *Game) CreateEnemy() *Enemy {

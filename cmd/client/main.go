@@ -4,20 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	pb "clicker/gen/proto"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type ClickerApp struct {
-	stream pb.GameService_PlayGameClient
-	player *pb.Player
+	stream    pb.GameService_PlayGameClient
+	player    *pb.Player
+	enemyName binding.String
+	enemyHp   binding.String
 }
 
 func main() {
@@ -35,7 +38,7 @@ func main() {
 
 	client := pb.NewGameServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	stream, err := client.PlayGame(ctx)
@@ -46,7 +49,10 @@ func main() {
 
 	myPlayer := &pb.Player{Id: 1, Name: "Farruh4eg", AttackDamage: 2.0}
 	appState := &ClickerApp{
-		stream: stream, player: myPlayer,
+		stream:    stream,
+		player:    myPlayer,
+		enemyName: binding.NewString(),
+		enemyHp:   binding.NewString(),
 	}
 
 	err = stream.Send(&pb.ClientToServer{
@@ -67,17 +73,20 @@ func main() {
 			log.Printf("Got a message from server: %v", in.GetInitialState())
 			if update := in.GetGameStateUpdate(); update != nil {
 				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, Last Attacker ID = %d", update.GetEnemyCurrentHp(), update.LastHit.GetAttackerId())
+				appState.enemyHp.Set(fmt.Sprintf("%.2f", update.GetEnemyCurrentHp()))
 			}
 			if initState := in.GetInitialState(); initState != nil {
 				log.Printf("INITIAL STATE: Boss Name = %s, HP = %.2f", initState.GetEnemy().Name, initState.Enemy.GetMaxHp())
+				appState.enemyName.Set(initState.GetEnemy().GetName())
+				appState.enemyHp.Set(fmt.Sprintf("%.2f", initState.GetEnemy().GetCurrentHp()))
 			}
 		}
 	}()
 
 	a := app.New()
 	w := a.NewWindow("clicker")
-
 	w.Resize(fyne.NewSize(600, 400))
+
 	attackButton := widget.NewButton("Attack", func() {
 		log.Println("Attacking now!")
 
@@ -90,7 +99,14 @@ func main() {
 			log.Printf("Could not send attack: %v", err)
 		}
 	})
-	w.SetContent(attackButton)
+
+	enemyNameLabel := widget.NewLabelWithData(appState.enemyName)
+
+	enemyHpLabel := widget.NewLabelWithData(appState.enemyHp)
+
+	enemyLayout := container.NewGridWithRows(2, enemyNameLabel, enemyHpLabel, attackButton)
+
+	w.SetContent(enemyLayout)
 
 	w.ShowAndRun()
 	log.Println("Application shutting down")
