@@ -80,7 +80,7 @@ func (a *ClickerApp) Run() {
 
 	enemyHpLabel := widget.NewLabelWithData(a.enemyHp)
 
-	enemyLayout := container.NewGridWithRows(2, enemyNameLabel, enemyHpLabel, attackButton)
+	enemyLayout := container.NewGridWithRows(3, enemyNameLabel, enemyHpLabel, attackButton)
 
 	w.SetContent(enemyLayout)
 

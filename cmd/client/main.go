@@ -3,8 +3,10 @@ package main
 import (
 	"clicker/pkg/client"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
+	"math/big"
 
 	pb "clicker/gen/proto"
 
@@ -36,7 +38,14 @@ func main() {
 	}
 	log.Println("Game has started")
 
-	myPlayer := &pb.Player{Id: 1, Name: "Farruh4eg", AttackDamage: 2.0}
+	randomID, err := rand.Int(rand.Reader, big.NewInt(150))
+	if err != nil {
+		log.Fatalf("Could not create random id: %v", err)
+	}
+
+	randomName := rand.Text()
+
+	myPlayer := &pb.Player{Id: randomID.Int64(), Name: randomName, AttackDamage: 2.0}
 	app := client.NewClickerApp(stream, myPlayer)
 	app.Run()
 }
