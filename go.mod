@@ -4,6 +4,7 @@ go 1.24.3
 
 require (
 	fyne.io/fyne/v2 v2.6.2
+	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.6
 )

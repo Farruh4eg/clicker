@@ -30,19 +30,21 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		return status.Errorf(codes.InvalidArgument, "Handshake failed: client must provide self_info in the first message")
 	}
 
-	log.Printf("Player : %s (ID: %d) connected", player.GetName(), player.GetId())
+	log.Printf("Player : %s connected", player.GetName())
 
 	updatesChan := make(chan *pb.ServerToClient, 10)
+
+	player.Id = game.GenerateID()
 	gs.game.AddPlayer(player.GetId(), updatesChan)
 	defer func() {
 		gs.game.RemovePlayer(player.GetId())
-		log.Printf("Player with ID = %d removed from the game", player.GetId())
+		log.Printf("Player with ID = %s removed from the game", player.GetId())
 	}()
 
 	go func() {
 		for update := range updatesChan {
 			if err := stream.Send(update); err != nil {
-				log.Printf("Error sending update to player %d: %v", player.GetId(), err)
+				log.Printf("Error sending update to player %s: %v", player.GetId(), err)
 			}
 		}
 	}()
@@ -90,7 +92,7 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 			gs.game.Broadcast(serverUpdate)
 
 		default:
-			log.Printf("Received unhandled event type %T from player %d", event, player.GetId())
+			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())
 		}
 	}
 }

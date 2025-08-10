@@ -6,25 +6,27 @@ import (
 	"image"
 	"log"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 type Game struct {
 	sync.Mutex
-	LastEnemyID int64
+	LastEnemyID string
 	Enemies     []*Enemy
-	Players     map[int64]chan *pb.ServerToClient // player id -> his channel
+	Players     map[string]chan *pb.ServerToClient // player id -> his channel
 }
 
-func (g *Game) AddPlayer(playerID int64, updateChan chan *pb.ServerToClient) {
+func (g *Game) AddPlayer(playerID string, updateChan chan *pb.ServerToClient) {
 	g.Lock()
 	defer g.Unlock()
 	if g.Players == nil {
-		g.Players = make(map[int64]chan *pb.ServerToClient)
+		g.Players = make(map[string]chan *pb.ServerToClient)
 	}
 	g.Players[playerID] = updateChan
 }
 
-func (g *Game) RemovePlayer(playerID int64) {
+func (g *Game) RemovePlayer(playerID string) {
 	g.Lock()
 	defer g.Unlock()
 	if channel, ok := g.Players[playerID]; ok {
@@ -41,7 +43,7 @@ func (g *Game) Broadcast(msg *pb.ServerToClient) {
 		select {
 		case channel <- msg:
 		default:
-			log.Printf("Player %d update channel is full. Message dropped", id)
+			log.Printf("Player %s update channel is full. Message dropped", id)
 		}
 	}
 }
@@ -49,12 +51,12 @@ func (g *Game) Broadcast(msg *pb.ServerToClient) {
 func NewGame() *Game {
 	return &Game{
 		Enemies: make([]*Enemy, 0, 10),
-		Players: make(map[int64]chan *pb.ServerToClient),
+		Players: make(map[string]chan *pb.ServerToClient),
 	}
 }
 
 type Enemy struct {
-	ID            int64
+	ID            string
 	Name          string
 	MaxHealth     float64
 	CurrentHealth float64
@@ -63,7 +65,7 @@ type Enemy struct {
 	// sync.Mutex
 }
 
-func (g *Game) ApplyDamage(enemyID int64, incomingDamage float64) (*Enemy, error) {
+func (g *Game) ApplyDamage(enemyID string, incomingDamage float64) (*Enemy, error) {
 	g.Lock()
 	defer g.Unlock()
 	// calculate enemy armor and resistance values here in future maybe?
@@ -82,7 +84,7 @@ func (g *Game) CreateEnemy() *Enemy {
 	g.Lock()
 	defer g.Unlock()
 
-	g.LastEnemyID++
+	g.LastEnemyID = GenerateID()
 	newEnemy := &Enemy{
 		ID:            g.LastEnemyID,
 		Name:          "Retard",
@@ -94,4 +96,8 @@ func (g *Game) CreateEnemy() *Enemy {
 	g.Enemies = append(g.Enemies, newEnemy)
 
 	return newEnemy
+}
+
+func GenerateID() string {
+	return uuid.New().String()
 }

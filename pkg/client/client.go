@@ -48,7 +48,7 @@ func (a *ClickerApp) Run() {
 			}
 			log.Printf("Got a message from server: %v", in.GetInitialState())
 			if update := in.GetGameStateUpdate(); update != nil {
-				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, Last Attacker ID = %d", update.GetEnemyCurrentHp(), update.LastHit.GetAttackerId())
+				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, Last Attacker ID = %s", update.GetEnemyCurrentHp(), update.LastHit.GetAttackerId())
 				a.enemyHp.Set(fmt.Sprintf("%.2f", update.GetEnemyCurrentHp()))
 			}
 			if initState := in.GetInitialState(); initState != nil {

@@ -34,7 +34,7 @@ func main() {
 	game.Lock()
 	fmt.Printf("Создано %d врагов\n", len(game.Enemies))
 	for _, e := range game.Enemies {
-		fmt.Printf("Враг ID: %d\n", e.ID)
+		fmt.Printf("Враг ID: %s\n", e.ID)
 	}
 	game.Unlock()
 
