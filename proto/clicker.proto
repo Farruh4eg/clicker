@@ -9,13 +9,13 @@ service GameService {
 }
 
 message Player {
-  int64 id = 1;
+  string id = 1;
   string name = 2;
   double attack_damage = 3;
 }
 
 message Enemy {
-  int64 id = 1;
+  string id = 1;
   string name = 2;
   double max_hp = 3;
   double current_hp = 4;
@@ -49,13 +49,13 @@ message InitialState {
 }
 
 message GameStateUpdate {
-  int64 enemy_id = 1;
+  string enemy_id = 1;
   double enemy_current_hp = 2;
   optional HitInfo last_hit = 3;
 }
 
 message HitInfo {
-  int64 attacker_id = 1;
+  string attacker_id = 1;
   double damage_dealt = 2;
 }
 
@@ -64,5 +64,5 @@ message PlayerJoined {
 }
 
 message PlayerLeft {
-  int64 player_id = 1;
+  string player_id = 1;
 }
