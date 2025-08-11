@@ -53,9 +53,6 @@ func (g *Game) RemovePlayer(playerID string) {
 }
 
 func (g *Game) Broadcast(msg *pb.ServerToClient) {
-	g.Lock()
-	defer g.Unlock()
-
 	for id, channel := range g.Players {
 		select {
 		case channel <- msg:
@@ -72,7 +69,7 @@ func NewGame() *Game {
 	}
 }
 
-func (g *Game) ApplyDamage(enemyID string, incomingDamage float64) (*Enemy, error) {
+func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID string) (*Enemy, error) {
 	g.Lock()
 	defer g.Unlock()
 	// calculate enemy armor and resistance values here in future maybe?
@@ -131,6 +128,7 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64) (*Enemy, erro
 	} else {
 		hitInfo := &pb.HitInfo{
 			DamageDealt: incomingDamage,
+			AttackerId:  attackerID,
 		}
 
 		g.Broadcast(&pb.ServerToClient{

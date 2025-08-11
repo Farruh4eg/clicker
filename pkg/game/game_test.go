@@ -91,7 +91,7 @@ func TestApplyDamage(t *testing.T) {
 
 	damage := 25.0
 
-	updatedEnemy, err := game.ApplyDamage(enemy.ID, damage)
+	updatedEnemy, err := game.ApplyDamage(enemy.ID, damage, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, updatedEnemy)

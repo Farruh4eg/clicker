@@ -90,7 +90,7 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 			log.Printf("Player %s attacked", player.GetName())
 
 			// ID not used yet, hence it being empty
-			gs.game.ApplyDamage("", player.GetAttackDamage())
+			gs.game.ApplyDamage("", player.GetAttackDamage(), player.GetId())
 
 		default:
 			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())
