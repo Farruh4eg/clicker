@@ -68,7 +68,10 @@ func TestBroadcast(t *testing.T) {
 
 func TestCreateEnemy(t *testing.T) {
 	game := NewGame()
-	enemy := game.CreateEnemy()
+	enemyStats := EnemyStats{
+		EnemyMaxHp: 100.0,
+	}
+	enemy := game.CreateEnemy(enemyStats, "Retard", nil)
 
 	assert.NotNil(t, enemy)
 	assert.NotEmpty(t, enemy.ID)
@@ -81,7 +84,11 @@ func TestCreateEnemy(t *testing.T) {
 
 func TestApplyDamage(t *testing.T) {
 	game := NewGame()
-	enemy := game.CreateEnemy()
+	enemyStats := EnemyStats{
+		EnemyMaxHp: 100.0,
+	}
+	enemy := game.CreateEnemy(enemyStats, "Retard", nil)
+
 	damage := 25.0
 
 	updatedEnemy, err := game.ApplyDamage(enemy.ID, damage)

@@ -9,34 +9,36 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"google.golang.org/grpc"
 )
 
 func main() {
-	game := game.NewGame()
+	gameInstance := game.NewGame()
 	closeChan := make(chan os.Signal, 1)
 	signal.Notify(closeChan, syscall.SIGINT, syscall.SIGTERM)
 
-	var wg sync.WaitGroup
-	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			game.CreateEnemy()
-		}()
+	baseHp := 100.0
+	hpMultiplier := 1.1
+	for i := 0; i < 10; i++ {
+		level := int64(i + 1)
+		hp := game.CalculateEnemyHp(level, baseHp, hpMultiplier)
+		enemyStats := game.EnemyStats{
+			EnemyMaxHp: hp,
+			EnemyLevel: level,
+		}
+		name := fmt.Sprintf("Level %d Golbin", level)
+
+		gameInstance.CreateEnemy(enemyStats, name, nil)
 	}
 
-	wg.Wait()
-
-	game.Lock()
-	fmt.Printf("Создано %d врагов\n", len(game.Enemies))
-	for _, e := range game.Enemies {
-		fmt.Printf("Враг ID: %s\n", e.ID)
+	gameInstance.Lock()
+	fmt.Printf("Создано %d врагов\n", len(gameInstance.Enemies))
+	for _, e := range gameInstance.Enemies {
+		fmt.Printf("Враг ID: %s\nLevel = %d\nMax HP = %.2f", e.ID, e.Level, e.MaxHealth)
 	}
-	game.Unlock()
+	gameInstance.Unlock()
 
 	lis, err := net.Listen("tcp", "localhost:32228")
 	if err != nil {
@@ -44,7 +46,7 @@ func main() {
 	}
 
 	fmt.Println("Game server init")
-	gameServer := server.NewGameServer(game)
+	gameServer := server.NewGameServer(gameInstance)
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterGameServiceServer(grpcServer, gameServer)

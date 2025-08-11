@@ -22,7 +22,6 @@ type ClickerApp struct {
 	enemyName      binding.String
 	enemyCurrentHp binding.Float
 	enemyMaxHp     binding.Float
-	enemyHpBar     widget.ProgressBar
 }
 
 func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *ClickerApp {
@@ -48,19 +47,33 @@ func (a *ClickerApp) Run() {
 		for {
 			in, err := a.stream.Recv()
 			if err != nil {
-				log.Printf("Failed to receive : %v", err)
+				log.Printf("Failed to receive from stream: %v", err)
 				return
 			}
-			log.Printf("Got a message from server: %v", in.GetInitialState())
-			if update := in.GetGameStateUpdate(); update != nil {
-				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, Last Attacker ID = %s", update.GetEnemyCurrentHp(), update.LastHit.GetAttackerId())
+
+			switch event := in.GetEvent().(type) {
+
+			case *pb.ServerToClient_GameStateUpdate:
+				update := event.GameStateUpdate
+				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, ID = %s", update.GetEnemyCurrentHp(), update.GetEnemyId())
 				a.enemyCurrentHp.Set(update.GetEnemyCurrentHp())
-			}
-			if initState := in.GetInitialState(); initState != nil {
-				log.Printf("INITIAL STATE: Boss Name = %s, HP = %.2f", initState.GetEnemy().Name, initState.Enemy.GetMaxHp())
+
+			case *pb.ServerToClient_InitialState:
+				initState := event.InitialState
+				log.Printf("INITIAL STATE: Boss Name = %s, HP = %.2f / %.2f", initState.GetEnemy().Name, initState.GetEnemy().GetCurrentHp(), initState.GetEnemy().GetMaxHp())
 				a.enemyName.Set(initState.GetEnemy().GetName())
 				a.enemyCurrentHp.Set(initState.GetEnemy().GetCurrentHp())
 				a.enemyMaxHp.Set(initState.GetEnemy().GetMaxHp())
+
+			case *pb.ServerToClient_EnemySpawned:
+				newEnemy := event.EnemySpawned
+				log.Printf("NEW ENEMY SPAWNED: Boss Name = %s, HP = %.2f, Level = %d", newEnemy.GetEnemy().GetName(), newEnemy.GetEnemy().GetMaxHp(), newEnemy.GetEnemy().GetLevel())
+				a.enemyName.Set(newEnemy.GetEnemy().GetName())
+				a.enemyCurrentHp.Set(newEnemy.GetEnemy().GetMaxHp())
+				a.enemyMaxHp.Set(newEnemy.GetEnemy().GetMaxHp())
+
+			default:
+				log.Printf("Received an unknown event type: %T", event)
 			}
 		}
 	}()
@@ -115,6 +128,7 @@ func (a *ClickerApp) Run() {
 		container.NewCenter(enemyNameLabel),
 		// TODO: insert image here
 
+		enemyHpLabel,
 		enemyHpBar,
 
 		layout.NewSpacer(),

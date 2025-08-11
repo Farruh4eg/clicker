@@ -12,6 +12,7 @@ message Player {
   string id = 1;
   string name = 2;
   double attack_damage = 3;
+  int64 level = 4;
 }
 
 message Enemy {
@@ -19,7 +20,8 @@ message Enemy {
   string name = 2;
   double max_hp = 3;
   double current_hp = 4;
-  optional bytes image = 5;
+  int64 level = 5;
+  optional bytes image = 6;
 }
 
 message ClientToServer {
@@ -35,9 +37,11 @@ message AttackAction {
 }
 
 message ServerToClient {
-  InitialState initial_state = 1;
-
-  GameStateUpdate game_state_update = 2;
+  oneof event {
+    InitialState initial_state = 1;
+    GameStateUpdate game_state_update = 2;
+    NewEnemySpawned enemy_spawned = 5;
+  }
 
   PlayerJoined player_joined = 3;
   PlayerLeft player_left = 4;
@@ -52,6 +56,10 @@ message GameStateUpdate {
   string enemy_id = 1;
   double enemy_current_hp = 2;
   optional HitInfo last_hit = 3;
+}
+
+message NewEnemySpawned {
+  Enemy enemy = 1;
 }
 
 message HitInfo {

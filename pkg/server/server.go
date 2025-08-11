@@ -35,6 +35,12 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 	updatesChan := make(chan *pb.ServerToClient, 10)
 
 	player.Id = game.GenerateID()
+	player.Level = 1
+
+	// TODO: retrieve actual player damage from some place like DB or whatever
+	// stuff below is temporary
+	player.AttackDamage = 50.0
+
 	gs.game.AddPlayer(player.GetId(), updatesChan)
 	defer func() {
 		gs.game.RemovePlayer(player.GetId())
@@ -45,24 +51,31 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		for update := range updatesChan {
 			if err := stream.Send(update); err != nil {
 				log.Printf("Error sending update to player %s: %v", player.GetId(), err)
+				return
 			}
 		}
 	}()
 
 	// TODO: send init state to player
+	if len(gs.game.Enemies) == 0 {
+		return status.Errorf(codes.Unavailable, "No enemies left")
+	}
+
 	currentEnemy := gs.game.Enemies[0]
 	initState := &pb.ServerToClient{
-		InitialState: &pb.InitialState{
-			Enemy: &pb.Enemy{
-				Id:        currentEnemy.ID,
-				Name:      currentEnemy.Name,
-				MaxHp:     currentEnemy.MaxHealth,
-				CurrentHp: currentEnemy.CurrentHealth,
-				Image:     nil,
+		Event: &pb.ServerToClient_InitialState{
+			InitialState: &pb.InitialState{
+				Enemy: &pb.Enemy{
+					Id:        currentEnemy.ID,
+					Name:      currentEnemy.Name,
+					MaxHp:     currentEnemy.MaxHealth,
+					CurrentHp: currentEnemy.CurrentHealth,
+					Level:     currentEnemy.Level,
+					Image:     currentEnemy.Image,
+				},
 			},
 		},
 	}
-
 	updatesChan <- initState
 	log.Println("Initial state sent?")
 
@@ -73,23 +86,11 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		}
 
 		switch event := req.GetEvent().(type) {
-
 		case *pb.ClientToServer_Attack:
 			log.Printf("Player %s attacked", player.GetName())
 
-			gs.game.ApplyDamage(currentEnemy.ID, player.GetAttackDamage())
-			hitInfo := &pb.HitInfo{
-				AttackerId:  player.GetId(),
-				DamageDealt: player.GetAttackDamage(),
-			}
-			serverUpdate := &pb.ServerToClient{
-				GameStateUpdate: &pb.GameStateUpdate{
-					EnemyCurrentHp: currentEnemy.CurrentHealth,
-					EnemyId:        currentEnemy.ID,
-					LastHit:        hitInfo,
-				},
-			}
-			gs.game.Broadcast(serverUpdate)
+			// ID not used yet, hence it being empty
+			gs.game.ApplyDamage("", player.GetAttackDamage())
 
 		default:
 			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())

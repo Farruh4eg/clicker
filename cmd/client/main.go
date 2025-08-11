@@ -39,7 +39,7 @@ func main() {
 
 	randomName := rand.Text()
 
-	myPlayer := &pb.Player{Name: randomName, AttackDamage: 2.0}
+	myPlayer := &pb.Player{Name: randomName}
 	app := client.NewClickerApp(stream, myPlayer)
 	app.Run()
 }
