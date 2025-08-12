@@ -88,6 +88,9 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 		// unoptimized (yet :)
 		log.Printf("Enemy %s (Level %d) died", enemy.Name, enemy.Level)
 
+		// fix the memory leak?
+		g.Enemies[0] = nil
+
 		g.Enemies = g.Enemies[1:]
 		if len(g.Enemies) == 0 {
 			log.Println("All enemies have been defeated")
