@@ -19,11 +19,9 @@ func main() {
 	closeChan := make(chan os.Signal, 1)
 	signal.Notify(closeChan, syscall.SIGINT, syscall.SIGTERM)
 
-	baseHp := 100.0
-	hpMultiplier := 1.1
 	for i := 0; i < 10; i++ {
 		level := int64(i + 1)
-		hp := game.CalculateEnemyHp(level, baseHp, hpMultiplier)
+		hp := game.CalculateEnemyHp(level)
 		enemyStats := game.EnemyStats{
 			EnemyMaxHp: hp,
 			EnemyLevel: level,

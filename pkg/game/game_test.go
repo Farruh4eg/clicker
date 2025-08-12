@@ -82,52 +82,63 @@ func TestCreateEnemy(t *testing.T) {
 	assert.Contains(t, game.Enemies, enemy)
 }
 
-func TestApplyDamage_EnemySurvives(t *testing.T) {
-	game := NewGame()
-	initialHp := 100.0
-	damage := 25.0
+func TestApplyDamage(t *testing.T) {
+	t.Run("when enemy survives", func(t *testing.T) {
+		game := NewGame()
+		initialHp := 100.0
+		damage := 25.0
 
-	game.CreateEnemyForLevel(1)
+		game.CreateEnemyForLevel(1)
 
-	enemyBeforeAttack := game.Enemies[0]
+		enemyBeforeAttack := game.Enemies[0]
 
-	enemyBeforeAttack.MaxHealth = initialHp
-	enemyBeforeAttack.CurrentHealth = initialHp
+		enemyBeforeAttack.MaxHealth = initialHp
+		enemyBeforeAttack.CurrentHealth = initialHp
 
-	game.ApplyDamage("", damage, "")
-	assert.Len(t, game.Enemies, 1, "Enemy should not be removed from the game")
+		game.ApplyDamage("", damage, "")
+		assert.Len(t, game.Enemies, 1, "Enemy should not be removed from the game")
 
-	enemyAfterAttack := game.Enemies[0]
+		enemyAfterAttack := game.Enemies[0]
 
-	expectedHp := initialHp - damage
-	assert.Equal(t, expectedHp, enemyAfterAttack.CurrentHealth, "Enemy health should be reduced be the damage amount")
-}
+		expectedHp := initialHp - damage
+		assert.Equal(t, expectedHp, enemyAfterAttack.CurrentHealth, "Enemy health should be reduced be the damage amount")
+	})
 
-func TestApplyDamage_EnemyDies(t *testing.T) {
-	game := NewGame()
-	initialHp := 100.0
-	lethalDamage := 125.0
+	t.Run("when enemy dies", func(t *testing.T) {
+		game := NewGame()
+		initialHp := 100.0
+		lethalDamage := 125.0
 
-	game.CreateEnemy(EnemyStats{EnemyMaxHp: initialHp, EnemyLevel: 1}, "GoblinToDie", nil)
-	game.CreateEnemy(EnemyStats{EnemyMaxHp: 150.0, EnemyLevel: 2}, "NextGoblin", nil)
+		game.CreateEnemy(EnemyStats{EnemyMaxHp: initialHp, EnemyLevel: 1}, "GoblinToDie", nil)
+		game.CreateEnemy(EnemyStats{EnemyMaxHp: 150.0, EnemyLevel: 2}, "NextGoblin", nil)
 
-	enemyThatWillSurvive := game.Enemies[1]
+		enemyThatWillSurvive := game.Enemies[1]
 
-	assert.Len(t, game.Enemies, 2, "Should start with two enemies")
+		assert.Len(t, game.Enemies, 2, "Should start with two enemies")
 
-	game.ApplyDamage("", lethalDamage, "")
+		game.ApplyDamage("", lethalDamage, "")
 
-	assert.Len(t, game.Enemies, 1, "One enemy should be removed from the game")
+		assert.Len(t, game.Enemies, 1, "One enemy should be removed from the game")
 
-	remainingEnemy := game.Enemies[0]
-	assert.Equal(t, enemyThatWillSurvive.ID, remainingEnemy.ID, "The correct enemy should remain in the game")
-}
+		remainingEnemy := game.Enemies[0]
+		assert.Equal(t, enemyThatWillSurvive.ID, remainingEnemy.ID, "The correct enemy should remain in the game")
+	})
 
-func TestApplyDamage_LastEnemyDies(t *testing.T) {
-	game := NewGame()
-	game.CreateEnemy(EnemyStats{EnemyMaxHp: 50.0, EnemyLevel: 1}, "LastOne", nil)
+	t.Run("when the last enemy dies", func(t *testing.T) {
+		game := NewGame()
+		game.CreateEnemy(EnemyStats{EnemyMaxHp: 50.0, EnemyLevel: 1}, "LastOne", nil)
 
-	game.ApplyDamage("", 100.0, "")
+		game.ApplyDamage("", 100.0, "")
 
-	assert.Empty(t, game.Enemies, "Enemies slice should be empty after the last enemy dies")
+		assert.Empty(t, game.Enemies, "Enemies slice should be empty after the last enemy dies")
+	})
+
+	t.Run("when attacking no enemies", func(t *testing.T) {
+		game := NewGame()
+		assert.Empty(t, game.Enemies, "Game should start with no enemies")
+
+		assert.NotPanics(t, func() {
+			game.ApplyDamage("", 100.0, "")
+		}, "ApplyDamage should not panic when there are no enemies")
+	})
 }
