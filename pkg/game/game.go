@@ -2,13 +2,17 @@
 package game
 
 import (
+	"bytes"
 	pb "clicker/gen/proto"
 	"fmt"
+	"image/png"
 	"log"
 	"math"
+	"os"
 	"sync"
 
 	"github.com/google/uuid"
+	"golang.org/x/image/webp"
 )
 
 type EnemyStats struct {
@@ -159,6 +163,30 @@ func (g *Game) CreateEnemyForLevel(level int64) *Enemy {
 	name := fmt.Sprintf("Level %d monster", level)
 
 	return g.CreateEnemy(stats, name, nil)
+}
+
+func LoadImageAsPNG(filePath string) []byte {
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Could not open image file: %v", err)
+		return nil
+	}
+	defer file.Close()
+
+	// TODO: detect the file type and use appropriate decoding logic
+	img, err := webp.Decode(file)
+	if err != nil {
+		log.Printf("Could not decode image file '%s': %v", filePath, err)
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	if err := png.Encode(buffer, img); err != nil {
+		log.Printf("Could not encode image to PNG: %v", err)
+		return nil
+	}
+
+	return buffer.Bytes()
 }
 
 func (g *Game) CreateEnemy(enemyStats EnemyStats, name string, image []byte) *Enemy {

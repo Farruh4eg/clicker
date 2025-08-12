@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -19,17 +20,35 @@ func main() {
 	closeChan := make(chan os.Signal, 1)
 	signal.Notify(closeChan, syscall.SIGINT, syscall.SIGTERM)
 
+	log.Println("Creating enemies and loading assets...")
+	var wg sync.WaitGroup
+
 	for i := 0; i < 10; i++ {
 		level := int64(i + 1)
-		hp := game.CalculateEnemyHp(level)
-		enemyStats := game.EnemyStats{
-			EnemyMaxHp: hp,
-			EnemyLevel: level,
-		}
-		name := fmt.Sprintf("Level %d Golbin", level)
 
-		gameInstance.CreateEnemy(enemyStats, name, nil)
+		wg.Add(1)
+
+		go func(lvl int64) {
+			defer wg.Done()
+
+			// TODO: change the hardcoded image value
+			imagePath := fmt.Sprintf("../../static/images/goblin.webp")
+
+			imageBytes := game.LoadImageAsPNG(imagePath)
+
+			hp := game.CalculateEnemyHp(lvl)
+			stats := game.EnemyStats{
+				EnemyMaxHp: hp,
+				EnemyLevel: lvl,
+			}
+			name := fmt.Sprintf("Level %d Goblin", lvl)
+
+			gameInstance.CreateEnemy(stats, name, imageBytes)
+		}(level)
 	}
+
+	wg.Wait()
+	log.Println("All assets loaded and enemies are ready")
 
 	gameInstance.Lock()
 	fmt.Printf("Создано %d врагов\n", len(gameInstance.Enemies))

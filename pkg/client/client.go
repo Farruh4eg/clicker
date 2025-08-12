@@ -2,7 +2,9 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
 	"log"
 	"strconv"
 
@@ -10,6 +12,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/layout"
@@ -22,6 +25,7 @@ type ClickerApp struct {
 	enemyName      binding.String
 	enemyCurrentHp binding.Float
 	enemyMaxHp     binding.Float
+	enemyImage     binding.Bytes
 }
 
 func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *ClickerApp {
@@ -31,6 +35,7 @@ func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *Cli
 		enemyName:      binding.NewString(),
 		enemyCurrentHp: binding.NewFloat(),
 		enemyMaxHp:     binding.NewFloat(),
+		enemyImage:     binding.NewBytes(),
 	}
 }
 
@@ -64,6 +69,7 @@ func (a *ClickerApp) Run() {
 				a.enemyName.Set(initState.GetEnemy().GetName())
 				a.enemyCurrentHp.Set(initState.GetEnemy().GetCurrentHp())
 				a.enemyMaxHp.Set(initState.GetEnemy().GetMaxHp())
+				a.enemyImage.Set(initState.GetEnemy().GetImage())
 
 			case *pb.ServerToClient_EnemySpawned:
 				newEnemy := event.EnemySpawned
@@ -71,6 +77,7 @@ func (a *ClickerApp) Run() {
 				a.enemyName.Set(newEnemy.GetEnemy().GetName())
 				a.enemyCurrentHp.Set(newEnemy.GetEnemy().GetMaxHp())
 				a.enemyMaxHp.Set(newEnemy.GetEnemy().GetMaxHp())
+				a.enemyImage.Set(newEnemy.GetEnemy().GetImage())
 
 			default:
 				log.Printf("Received an unknown event type: %T", event)
@@ -102,6 +109,34 @@ func (a *ClickerApp) Run() {
 	enemyHpLabel := widget.NewLabel("")
 	enemyHpLabel.Alignment = fyne.TextAlignCenter
 
+	canvasImage := &canvas.Image{}
+	canvasImage.FillMode = canvas.ImageFillContain
+	canvasImage.SetMinSize(fyne.NewSize(150, 150))
+
+	imageListener := binding.NewDataListener(func() {
+		imageBytes, err := a.enemyImage.Get()
+		if err != nil || len(imageBytes) == 0 {
+			return
+		}
+
+		go func() {
+			log.Println("Decoding image")
+			img, err := png.Decode(bytes.NewReader(imageBytes))
+			if err != nil {
+				log.Printf("Failed to decode image: %v", err)
+				return
+			}
+			log.Println("Image decoded successfully")
+
+			fyne.Do(func() {
+				log.Println("Updating image on main thread")
+				canvasImage.Image = img
+				canvasImage.Refresh()
+			})
+		}()
+	})
+	a.enemyImage.AddListener(imageListener)
+
 	hpListener := binding.NewDataListener(func() {
 		current, errCurrent := a.enemyCurrentHp.Get()
 		max, errMax := a.enemyMaxHp.Get()
@@ -126,7 +161,7 @@ func (a *ClickerApp) Run() {
 	enemyLayout := container.NewVBox(
 		container.NewCenter(enemyNameLabel),
 		// TODO: insert image here
-
+		container.NewCenter(canvasImage),
 		enemyHpLabel,
 		enemyHpBar,
 
@@ -137,6 +172,7 @@ func (a *ClickerApp) Run() {
 	w.SetContent(enemyLayout)
 
 	hpListener.DataChanged()
+	imageListener.DataChanged()
 
 	w.ShowAndRun()
 	log.Println("Application shutting down")

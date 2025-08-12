@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.6.2
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/image v0.24.0
 	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.6
 )
@@ -37,7 +38,6 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
-	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
