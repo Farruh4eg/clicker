@@ -148,7 +148,6 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 			},
 		},
 	})
-	return
 }
 
 func (g *Game) CreateEnemyForLevel(level int64) *Enemy {
