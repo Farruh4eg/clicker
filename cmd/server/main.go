@@ -70,8 +70,6 @@ func main() {
 	}()
 	fmt.Println("Game server init successful. Now serving")
 
-	// main game loop here?
-
 	<-closeChan
 	log.Println("Shutting down the server")
 	grpcServer.GracefulStop()

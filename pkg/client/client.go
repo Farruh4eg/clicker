@@ -160,7 +160,6 @@ func (a *ClickerApp) Run() {
 
 	enemyLayout := container.NewVBox(
 		container.NewCenter(enemyNameLabel),
-		// TODO: insert image here
 		container.NewCenter(canvasImage),
 		enemyHpLabel,
 		enemyHpBar,
