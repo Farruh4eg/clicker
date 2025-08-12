@@ -57,7 +57,7 @@ func TestBroadcast(t *testing.T) {
 			Player: &pb.Player{Id: "player3"},
 		},
 	}
-	game.Broadcast(message)
+	game.broadcast(message)
 
 	receivedMsg1 := <-updateChan1
 	receivedMsg2 := <-updateChan2
@@ -82,18 +82,52 @@ func TestCreateEnemy(t *testing.T) {
 	assert.Contains(t, game.Enemies, enemy)
 }
 
-func TestApplyDamage(t *testing.T) {
+func TestApplyDamage_EnemySurvives(t *testing.T) {
 	game := NewGame()
-	enemyStats := EnemyStats{
-		EnemyMaxHp: 100.0,
-	}
-	enemy := game.CreateEnemy(enemyStats, "Retard", nil)
-
+	initialHp := 100.0
 	damage := 25.0
 
-	updatedEnemy, err := game.ApplyDamage(enemy.ID, damage, "")
+	game.CreateEnemyForLevel(1)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, updatedEnemy)
-	assert.Equal(t, enemy.MaxHealth-damage, updatedEnemy.CurrentHealth)
+	enemyBeforeAttack := game.Enemies[0]
+
+	enemyBeforeAttack.MaxHealth = initialHp
+	enemyBeforeAttack.CurrentHealth = initialHp
+
+	game.ApplyDamage("", damage, "")
+	assert.Len(t, game.Enemies, 1, "Enemy should not be removed from the game")
+
+	enemyAfterAttack := game.Enemies[0]
+
+	expectedHp := initialHp - damage
+	assert.Equal(t, expectedHp, enemyAfterAttack.CurrentHealth, "Enemy health should be reduced be the damage amount")
+}
+
+func TestApplyDamage_EnemyDies(t *testing.T) {
+	game := NewGame()
+	initialHp := 100.0
+	lethalDamage := 125.0
+
+	game.CreateEnemy(EnemyStats{EnemyMaxHp: initialHp, EnemyLevel: 1}, "GoblinToDie", nil)
+	game.CreateEnemy(EnemyStats{EnemyMaxHp: 150.0, EnemyLevel: 2}, "NextGoblin", nil)
+
+	enemyThatWillSurvive := game.Enemies[1]
+
+	assert.Len(t, game.Enemies, 2, "Should start with two enemies")
+
+	game.ApplyDamage("", lethalDamage, "")
+
+	assert.Len(t, game.Enemies, 1, "One enemy should be removed from the game")
+
+	remainingEnemy := game.Enemies[0]
+	assert.Equal(t, enemyThatWillSurvive.ID, remainingEnemy.ID, "The correct enemy should remain in the game")
+}
+
+func TestApplyDamage_LastEnemyDies(t *testing.T) {
+	game := NewGame()
+	game.CreateEnemy(EnemyStats{EnemyMaxHp: 50.0, EnemyLevel: 1}, "LastOne", nil)
+
+	game.ApplyDamage("", 100.0, "")
+
+	assert.Empty(t, game.Enemies, "Enemies slice should be empty after the last enemy dies")
 }

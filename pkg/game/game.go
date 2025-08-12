@@ -3,6 +3,7 @@ package game
 
 import (
 	pb "clicker/gen/proto"
+	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -34,6 +35,11 @@ type Enemy struct {
 	// sync.Mutex
 }
 
+const (
+	BaseHp     = 100.0
+	Multiplier = 1.1
+)
+
 func (g *Game) AddPlayer(playerID string, updateChan chan *pb.ServerToClient) {
 	g.Lock()
 	defer g.Unlock()
@@ -52,7 +58,7 @@ func (g *Game) RemovePlayer(playerID string) {
 	}
 }
 
-func (g *Game) Broadcast(msg *pb.ServerToClient) {
+func (g *Game) broadcast(msg *pb.ServerToClient) {
 	for id, channel := range g.Players {
 		select {
 		case channel <- msg:
@@ -69,7 +75,7 @@ func NewGame() *Game {
 	}
 }
 
-func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID string) (*Enemy, error) {
+func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID string) {
 	g.Lock()
 	defer g.Unlock()
 	// calculate enemy armor and resistance values here in future maybe?
@@ -77,64 +83,20 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 	// also, TODO: find enemy by id
 	if len(g.Enemies) == 0 {
 		// TODO: spawn more enemies
-		return nil, nil
+		log.Println("Attack ignored, no enemies to attack")
+		return
 	}
 
 	enemy := g.Enemies[0]
 	enemy.CurrentHealth -= incomingDamage
 
-	if enemy.CurrentHealth <= 0 {
-		// TODO: destroy the enemy, spawn a new one, award xp, gold, hot wife
-		// unoptimized (yet :)
-		log.Printf("Enemy %s (Level %d) died", enemy.Name, enemy.Level)
-
-		// fix the memory leak?
-		g.Enemies[0] = nil
-
-		g.Enemies = g.Enemies[1:]
-		if len(g.Enemies) == 0 {
-			log.Println("All enemies have been defeated")
-			g.Broadcast(&pb.ServerToClient{
-				// TODO: add new field to proto for this case?
-				Event: &pb.ServerToClient_GameStateUpdate{
-					GameStateUpdate: &pb.GameStateUpdate{
-						EnemyId:        enemy.ID,
-						EnemyCurrentHp: 0.0,
-					},
-				},
-			})
-
-			return nil, nil
-		}
-
-		newEnemy := g.Enemies[0]
-		log.Printf("Enemy died. Spawning next enemy: %s with %.2f HP", newEnemy.Name, newEnemy.MaxHealth)
-
-		pbEnemy := &pb.Enemy{
-			Id:        newEnemy.ID,
-			Name:      newEnemy.Name,
-			MaxHp:     newEnemy.MaxHealth,
-			CurrentHp: newEnemy.MaxHealth,
-			Level:     newEnemy.Level,
-			Image:     newEnemy.Image,
-		}
-
-		g.Broadcast(&pb.ServerToClient{
-			Event: &pb.ServerToClient_EnemySpawned{
-				EnemySpawned: &pb.NewEnemySpawned{
-					Enemy: pbEnemy,
-				},
-			},
-		})
-		return newEnemy, nil
-
-	} else {
+	if enemy.CurrentHealth > 0 {
 		hitInfo := &pb.HitInfo{
 			DamageDealt: incomingDamage,
 			AttackerId:  attackerID,
 		}
 
-		g.Broadcast(&pb.ServerToClient{
+		g.broadcast(&pb.ServerToClient{
 			Event: &pb.ServerToClient_GameStateUpdate{
 				GameStateUpdate: &pb.GameStateUpdate{
 					EnemyCurrentHp: enemy.CurrentHealth,
@@ -143,9 +105,61 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 				},
 			},
 		})
+		return
 	}
 
-	return enemy, nil
+	// destroy the enemy, spawn a new one, award xp, gold, hot wife
+	log.Printf("Enemy %s (Level %d) died", enemy.Name, enemy.Level)
+
+	// fix the memory leak?
+	g.Enemies[0] = nil
+
+	g.Enemies = g.Enemies[1:]
+	if len(g.Enemies) == 0 {
+		log.Println("All enemies have been defeated")
+		g.broadcast(&pb.ServerToClient{
+			// TODO: add new field to proto for this case?
+			Event: &pb.ServerToClient_GameStateUpdate{
+				GameStateUpdate: &pb.GameStateUpdate{
+					EnemyId:        enemy.ID,
+					EnemyCurrentHp: 0.0,
+				},
+			},
+		})
+		return
+	}
+
+	newEnemy := g.Enemies[0]
+	log.Printf("Enemy died. Spawning next enemy: %s with %.2f HP", newEnemy.Name, newEnemy.MaxHealth)
+
+	pbEnemy := &pb.Enemy{
+		Id:        newEnemy.ID,
+		Name:      newEnemy.Name,
+		MaxHp:     newEnemy.MaxHealth,
+		CurrentHp: newEnemy.MaxHealth,
+		Level:     newEnemy.Level,
+		Image:     newEnemy.Image,
+	}
+
+	g.broadcast(&pb.ServerToClient{
+		Event: &pb.ServerToClient_EnemySpawned{
+			EnemySpawned: &pb.NewEnemySpawned{
+				Enemy: pbEnemy,
+			},
+		},
+	})
+	return
+}
+
+func (g *Game) CreateEnemyForLevel(level int64) *Enemy {
+	hp := CalculateEnemyHp(level)
+	stats := EnemyStats{
+		EnemyMaxHp: hp,
+		EnemyLevel: level,
+	}
+	name := fmt.Sprintf("Level %d monster", level)
+
+	return g.CreateEnemy(stats, name, nil)
 }
 
 func (g *Game) CreateEnemy(enemyStats EnemyStats, name string, image []byte) *Enemy {
@@ -171,6 +185,6 @@ func GenerateID() string {
 	return uuid.New().String()
 }
 
-func CalculateEnemyHp(level int64, baseHp float64, multiplier float64) float64 {
-	return baseHp * math.Pow(multiplier, float64(level-1))
+func CalculateEnemyHp(level int64) float64 {
+	return BaseHp * math.Pow(Multiplier, float64(level-1))
 }
