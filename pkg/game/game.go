@@ -193,7 +193,7 @@ func LoadAndProcessImage(filePath string, width uint, height uint) []byte {
 }
 
 func (g *Game) CreateAndPrepareEnemy(level int64, imagePath string) *Enemy {
-	imageBytes := LoadAndProcessImage(imagePath, 512, 512)
+	imageBytes := LoadAndProcessImage(imagePath, 384, 384)
 	hp := CalculateEnemyHp(level)
 	stats := EnemyStats{
 		EnemyMaxHp: hp,

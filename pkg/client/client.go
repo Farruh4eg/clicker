@@ -110,8 +110,8 @@ func (a *ClickerApp) Run() {
 	enemyHpLabel.Alignment = fyne.TextAlignCenter
 
 	canvasImage := &canvas.Image{}
-	canvasImage.FillMode = canvas.ImageFillContain
-	canvasImage.SetMinSize(fyne.NewSize(150, 150))
+	canvasImage.FillMode = canvas.ImageFillOriginal
+	canvasImage.SetMinSize(fyne.NewSize(256, 256))
 
 	imageListener := binding.NewDataListener(func() {
 		imageBytes, err := a.enemyImage.Get()
