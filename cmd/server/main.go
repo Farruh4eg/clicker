@@ -23,32 +23,27 @@ func main() {
 	log.Println("Creating enemies and loading assets...")
 	var wg sync.WaitGroup
 
-	for i := 0; i < 10; i++ {
-		level := int64(i + 1)
+	const numEnemies = 10
+	enemies := make([]*game.Enemy, numEnemies)
 
+	for i := 0; i < numEnemies; i++ {
+		level := int64(i + 1)
 		wg.Add(1)
 
-		go func(lvl int64) {
+		go func(lvl int64, index int) {
 			defer wg.Done()
 
 			// TODO: change the hardcoded image value
-			imagePath := fmt.Sprintf("../../static/images/goblin.webp")
+			imagePath := "static/images/goblin.webp"
 
-			imageBytes := game.LoadImageAsPNG(imagePath)
-
-			hp := game.CalculateEnemyHp(lvl)
-			stats := game.EnemyStats{
-				EnemyMaxHp: hp,
-				EnemyLevel: lvl,
-			}
-			name := fmt.Sprintf("Level %d Goblin", lvl)
-
-			gameInstance.CreateEnemy(stats, name, imageBytes)
-		}(level)
+			preparedEnemy := gameInstance.CreateAndPrepareEnemy(lvl, imagePath)
+			enemies[index] = preparedEnemy
+		}(level, i)
 	}
 
 	wg.Wait()
 	log.Println("All assets loaded and enemies are ready")
+	gameInstance.Enemies = enemies
 
 	gameInstance.Lock()
 	fmt.Printf("Создано %d врагов\n", len(gameInstance.Enemies))

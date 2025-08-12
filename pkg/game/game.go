@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/nfnt/resize"
 	"golang.org/x/image/webp"
 )
 
@@ -165,7 +166,7 @@ func (g *Game) CreateEnemyForLevel(level int64) *Enemy {
 	return g.CreateEnemy(stats, name, nil)
 }
 
-func LoadImageAsPNG(filePath string) []byte {
+func LoadAndProcessImage(filePath string, width uint, height uint) []byte {
 	file, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("Could not open image file: %v", err)
@@ -180,13 +181,35 @@ func LoadImageAsPNG(filePath string) []byte {
 		return nil
 	}
 
+	resizedImg := resize.Resize(width, height, img, resize.Lanczos3)
+
 	buffer := new(bytes.Buffer)
-	if err := png.Encode(buffer, img); err != nil {
+	if err := png.Encode(buffer, resizedImg); err != nil {
 		log.Printf("Could not encode image to PNG: %v", err)
 		return nil
 	}
 
 	return buffer.Bytes()
+}
+
+func (g *Game) CreateAndPrepareEnemy(level int64, imagePath string) *Enemy {
+	imageBytes := LoadAndProcessImage(imagePath, 512, 512)
+	hp := CalculateEnemyHp(level)
+	stats := EnemyStats{
+		EnemyMaxHp: hp,
+		EnemyLevel: level,
+	}
+
+	name := fmt.Sprintf("Level %d Goblin", level)
+
+	return &Enemy{
+		ID:            GenerateID(),
+		Name:          name,
+		MaxHealth:     stats.EnemyMaxHp,
+		CurrentHealth: stats.EnemyMaxHp,
+		Level:         stats.EnemyLevel,
+		Image:         imageBytes,
+	}
 }
 
 func (g *Game) CreateEnemy(enemyStats EnemyStats, name string, image []byte) *Enemy {
