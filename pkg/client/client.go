@@ -97,7 +97,6 @@ func (a *ClickerApp) Run() {
 
 	enemyNameLabel := widget.NewLabelWithData(a.enemyName)
 
-	// TODO: implement enemy hp as a slider
 	enemyHpBar := widget.NewProgressBar()
 
 	enemyHpLabel := widget.NewLabel("")

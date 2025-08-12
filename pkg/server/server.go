@@ -56,7 +56,6 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		}
 	}()
 
-	// TODO: send init state to player
 	if len(gs.game.Enemies) == 0 {
 		return status.Errorf(codes.Unavailable, "No enemies left")
 	}
