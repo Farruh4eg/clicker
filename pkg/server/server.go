@@ -26,6 +26,26 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 	}
 
 	player := initialReq.GetSelfInfo()
+	player.Id = game.GenerateID()
+
+	player.Stats = &pb.PlayerStats{
+		Level:        1,
+		Experience:   0,
+		NextLevelExp: 100,
+	}
+	player.Resources = &pb.PlayerResources{
+		Gold: 0,
+	}
+	player.Equipment = &pb.PlayerEquipment{
+		Weapon: &pb.Weapon{
+			ItemId:       "starter_stick",
+			Name:         "Деревянная палка",
+			Level:        1,
+			BaseDamage:   5.0,
+			DamageGrowth: 2.0,
+		},
+	}
+
 	if player == nil {
 		return status.Errorf(codes.InvalidArgument, "Handshake failed: client must provide self_info in the first message")
 	}
@@ -33,13 +53,6 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 	log.Printf("Player : %s connected", player.GetName())
 
 	updatesChan := make(chan *pb.ServerToClient, 10)
-
-	player.Id = game.GenerateID()
-	player.Level = 1
-
-	// TODO: retrieve actual player damage from some place like DB or whatever
-	// stuff below is temporary
-	player.AttackDamage = 50.0
 
 	gs.game.AddPlayer(player.GetId(), updatesChan)
 	defer func() {
@@ -87,9 +100,10 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		switch event := req.GetEvent().(type) {
 		case *pb.ClientToServer_Attack:
 			log.Printf("Player %s attacked", player.GetName())
-
+			weapon := player.GetEquipment().GetWeapon()
+			damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
 			// ID not used yet, hence it being empty
-			gs.game.ApplyDamage("", player.GetAttackDamage(), player.GetId())
+			gs.game.ApplyDamage("", damage, player.GetId())
 
 		default:
 			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())
