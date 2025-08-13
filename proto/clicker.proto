@@ -11,8 +11,36 @@ service GameService {
 message Player {
   string id = 1;
   string name = 2;
-  double attack_damage = 3;
-  int64 level = 4;
+
+  PlayerStats stats = 3;
+
+  PlayerResources resources = 4;
+
+  PlayerEquipment equipment = 5;
+
+  // repeated Item inventory = 6;
+}
+
+message PlayerStats {
+  int64 level = 1;
+  int64 experience = 2;
+  int64 next_level_exp = 3;
+}
+
+message PlayerResources {
+  int64 gold = 1;
+}
+
+message PlayerEquipment {
+  Weapon weapon = 1;
+}
+
+message Weapon {
+  string item_id = 1;
+  string name = 2;
+  int64 level = 3;
+  float base_damage = 4;
+  float damage_growth = 5;
 }
 
 message Enemy {
