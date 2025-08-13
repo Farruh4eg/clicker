@@ -103,7 +103,7 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 			weapon := player.GetEquipment().GetWeapon()
 			damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
 			// ID not used yet, hence it being empty
-			gs.game.ApplyDamage("", damage, player.GetId())
+			gs.game.ApplyDamage("", float64(damage), player.GetId())
 
 		default:
 			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())

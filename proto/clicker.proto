@@ -68,11 +68,16 @@ message ServerToClient {
   oneof event {
     InitialState initial_state = 1;
     GameStateUpdate game_state_update = 2;
-    NewEnemySpawned enemy_spawned = 5;
+    NewEnemySpawned enemy_spawned = 3;
+    PlayerStateUpdate player_state_update = 4;
   }
 
-  PlayerJoined player_joined = 3;
-  PlayerLeft player_left = 4;
+  PlayerJoined player_joined = 5;
+  PlayerLeft player_left = 6;
+}
+
+message PlayerStateUpdate {
+  Player player = 1;
 }
 
 message InitialState {

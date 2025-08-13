@@ -20,22 +20,42 @@ import (
 )
 
 type ClickerApp struct {
-	stream         pb.GameService_PlayGameClient
-	player         *pb.Player
+	stream pb.GameService_PlayGameClient
+	player *pb.Player
+
 	enemyName      binding.String
 	enemyCurrentHp binding.Float
 	enemyMaxHp     binding.Float
 	enemyImage     binding.Bytes
+
+	playerGold           binding.Int
+	playerLevel          binding.Int
+	playerExp            binding.Int
+	playerExpToNextLevel binding.Int
+
+	weaponName   binding.String
+	weaponDamage binding.Float
+	weaponLevel  binding.Int
 }
 
 func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *ClickerApp {
 	return &ClickerApp{
-		stream:         stream,
-		player:         player,
+		stream: stream,
+		player: player,
+
 		enemyName:      binding.NewString(),
 		enemyCurrentHp: binding.NewFloat(),
 		enemyMaxHp:     binding.NewFloat(),
 		enemyImage:     binding.NewBytes(),
+
+		playerGold:           binding.NewInt(),
+		playerLevel:          binding.NewInt(),
+		playerExp:            binding.NewInt(),
+		playerExpToNextLevel: binding.NewInt(),
+
+		weaponName:   binding.NewString(),
+		weaponDamage: binding.NewFloat(),
+		weaponLevel:  binding.NewInt(),
 	}
 }
 

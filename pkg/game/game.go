@@ -26,7 +26,12 @@ type Game struct {
 	sync.Mutex
 	LastEnemyID string
 	Enemies     []*Enemy
-	Players     map[string]chan *pb.ServerToClient // player id -> his channel
+	Players     map[string]*PlayerSession // player id -> his session
+}
+
+type PlayerSession struct {
+	Data    *pb.Player
+	Updates chan *pb.ServerToClient
 }
 
 type Enemy struct {
@@ -43,32 +48,50 @@ type Enemy struct {
 const (
 	BaseHp     = 100.0
 	Multiplier = 1.1
+
+	BaseGoldPerKill            = 10
+	BaseExpPerKill             = 5
+	LastHitGoldBonusMultiplier = 1.5
+	LastHitExpBonusMultiplier  = 2.0
 )
 
-func (g *Game) AddPlayer(playerID string, updateChan chan *pb.ServerToClient) {
+func (g *Game) AddPlayer(player *pb.Player, updateChan chan *pb.ServerToClient) {
 	g.Lock()
 	defer g.Unlock()
 	if g.Players == nil {
-		g.Players = make(map[string]chan *pb.ServerToClient)
+		g.Players = make(map[string]*PlayerSession)
 	}
-	g.Players[playerID] = updateChan
+	g.Players[player.GetId()] = &PlayerSession{
+		Data:    player,
+		Updates: updateChan,
+	}
 }
 
 func (g *Game) RemovePlayer(playerID string) {
 	g.Lock()
 	defer g.Unlock()
-	if channel, ok := g.Players[playerID]; ok {
+	if session, ok := g.Players[playerID]; ok {
 		delete(g.Players, playerID)
-		close(channel)
+		close(session.Updates)
 	}
 }
 
 func (g *Game) broadcast(msg *pb.ServerToClient) {
-	for id, channel := range g.Players {
+	for _, session := range g.Players {
 		select {
-		case channel <- msg:
+		case session.Updates <- msg:
 		default:
-			log.Printf("Player %s update channel is full. Message dropped", id)
+			log.Printf("Player %s update channel is full. Message dropped", session.Data.GetId())
+		}
+	}
+}
+
+func (g *Game) sendToPlayer(playerID string, msg *pb.ServerToClient) {
+	if session, ok := g.Players[playerID]; ok {
+		select {
+		case session.Updates <- msg:
+		default:
+			log.Printf("Player %s update channel is full. Message dropped", session.Data.GetId())
 		}
 	}
 }
@@ -76,7 +99,7 @@ func (g *Game) broadcast(msg *pb.ServerToClient) {
 func NewGame() *Game {
 	return &Game{
 		Enemies: make([]*Enemy, 0, 10),
-		Players: make(map[string]chan *pb.ServerToClient),
+		Players: make(map[string]*PlayerSession),
 	}
 }
 
@@ -115,6 +138,34 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 
 	// destroy the enemy, spawn a new one, award xp, gold, hot wife
 	log.Printf("Enemy %s (Level %d) died", enemy.Name, enemy.Level)
+
+	baseGold := int64(BaseGoldPerKill * enemy.Level)
+	baseExp := int64(BaseExpPerKill * enemy.Level)
+
+	lastHitBonusGold := int64(float64(baseGold) * (LastHitGoldBonusMultiplier - 1))
+	lastHitBonusExp := int64(float64(baseExp) * (LastHitExpBonusMultiplier - 1))
+
+	for _, session := range g.Players {
+		player := session.Data
+		player.Resources.Gold += baseGold
+		player.Stats.Experience += baseExp
+
+		if player.GetId() == attackerID {
+			player.Resources.Gold += lastHitBonusGold
+			player.Stats.Experience += lastHitBonusExp
+			log.Printf("Player %s received a last hit bonus: +%d Gold, +%d Exp\n", player.GetName(), lastHitBonusGold, lastHitBonusExp)
+		}
+
+		g.checkForLevelUp(player)
+
+		g.sendToPlayer(player.GetId(), &pb.ServerToClient{
+			Event: &pb.ServerToClient_PlayerStateUpdate{
+				PlayerStateUpdate: &pb.PlayerStateUpdate{
+					Player: player,
+				},
+			},
+		})
+	}
 
 	// fix the memory leak?
 	g.Enemies[0] = nil
@@ -237,4 +288,20 @@ func GenerateID() string {
 
 func CalculateEnemyHp(level int64) float64 {
 	return BaseHp * math.Pow(Multiplier, float64(level-1))
+}
+
+func (g *Game) checkForLevelUp(player *pb.Player) {
+	stats := player.GetStats()
+	if stats.Experience >= stats.GetNextLevelExp() {
+		stats.Level++
+
+		// maybe subject to change in future
+		stats.Experience = 0
+
+		stats.NextLevelExp = int64(float64(stats.GetNextLevelExp()) * 1.5)
+
+		log.Printf("Player %s has reached Level %d", player.GetName(), stats.GetLevel())
+
+		// maybe send some message to the player here?
+	}
 }
