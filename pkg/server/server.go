@@ -23,41 +23,29 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 	initialReq, err := stream.Recv()
 	if err != nil {
 		log.Printf("Failed to receive init handshake: %v", err)
+		return err
 	}
 
-	player := initialReq.GetSelfInfo()
-	player.Id = game.GenerateID()
-
-	player.Stats = &pb.PlayerStats{
-		Level:        1,
-		Experience:   0,
-		NextLevelExp: 100,
-	}
-	player.Resources = &pb.PlayerResources{
-		Gold: 0,
-	}
-	player.Equipment = &pb.PlayerEquipment{
-		Weapon: &pb.Weapon{
-			ItemId:       "starter_stick",
-			Name:         "Деревянная палка",
-			Level:        1,
-			BaseDamage:   5.0,
-			DamageGrowth: 2.0,
-		},
+	selfInfo := initialReq.GetSelfInfo()
+	if selfInfo == nil {
+		return status.Errorf(codes.InvalidArgument, "Handshake failed: client must provide self_info")
 	}
 
-	if player == nil {
-		return status.Errorf(codes.InvalidArgument, "Handshake failed: client must provide self_info in the first message")
-	}
-
-	log.Printf("Player : %s connected", player.GetName())
+	player := game.InitializePlayer(selfInfo.GetName())
+	log.Printf("Player '%s' connecting with generated ID: %s", player.GetName(), player.GetId())
 
 	updatesChan := make(chan *pb.ServerToClient, 10)
-
 	gs.game.AddPlayer(player, updatesChan)
 	defer func() {
 		gs.game.RemovePlayer(player.GetId())
-		log.Printf("Player with ID = %s removed from the game", player.GetId())
+		gs.game.Broadcast(&pb.ServerToClient{
+			Event: &pb.ServerToClient_PlayerLeft{
+				PlayerLeft: &pb.PlayerLeft{
+					PlayerId: player.GetId(),
+				},
+			},
+		}, "")
+		log.Printf("Player %s (ID: %s) disconnected\n", player.GetName(), player.GetId())
 	}()
 
 	go func() {
@@ -69,48 +57,60 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 		}
 	}()
 
-	if len(gs.game.Enemies) == 0 {
-		return status.Errorf(codes.Unavailable, "No enemies left")
+	welcomeMsg := &pb.ServerToClient{
+		Event: &pb.ServerToClient_Welcome{
+			Welcome: &pb.Welcome{
+				Player: player,
+			},
+		},
 	}
+	updatesChan <- welcomeMsg
+	log.Printf("Sent Welcome message to %s\n", player.GetName())
 
-	currentEnemy := gs.game.Enemies[0]
+	currentEnemy := gs.game.GetCurrentEnemy()
+	if currentEnemy == nil {
+		return status.Errorf(codes.Unavailable, "No enemies in the game")
+	}
+	allPlayers := gs.game.GetAllPlayers()
+
 	initState := &pb.ServerToClient{
 		Event: &pb.ServerToClient_InitialState{
 			InitialState: &pb.InitialState{
-				Enemy: &pb.Enemy{
-					Id:        currentEnemy.ID,
-					Name:      currentEnemy.Name,
-					MaxHp:     currentEnemy.MaxHealth,
-					CurrentHp: currentEnemy.CurrentHealth,
-					Level:     currentEnemy.Level,
-					Image:     currentEnemy.Image,
-				},
+				Enemy:   currentEnemy.ToProto(),
+				Players: allPlayers,
 			},
 		},
 	}
 	updatesChan <- initState
-	log.Println("Initial state sent?")
+	log.Printf("Sent initial state to player %s\n", player.GetId())
+
+	playerJoinedMsg := &pb.ServerToClient{
+		Event: &pb.ServerToClient_PlayerJoined{
+			PlayerJoined: &pb.PlayerJoined{
+				Player: player,
+			},
+		},
+	}
+	gs.game.Broadcast(playerJoinedMsg, player.GetId())
 
 	for {
 		req, err := stream.Recv()
 		if err != nil {
+			log.Printf("Stream for player %s closed: %v", player.GetId(), err)
 			return err
 		}
 
-		switch event := req.GetEvent().(type) {
+		switch req.GetEvent().(type) {
 		case *pb.ClientToServer_Attack:
-			log.Printf("Player %s attacked", player.GetName())
 			weapon := player.GetEquipment().GetWeapon()
 			damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
-			// ID not used yet, hence it being empty
 			gs.game.ApplyDamage("", float64(damage), player.GetId())
 
 		case *pb.ClientToServer_UpgradeWeapon:
-			log.Printf("Player %s requested a weapon upgrade\n", player.GetName())
 			gs.game.UpgradeWeapon(player.GetId())
 
 		default:
-			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())
+			log.Printf("Received unhandled event type from player %s\n", player.GetName())
 		}
 	}
 }

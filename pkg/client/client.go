@@ -3,7 +3,6 @@ package client
 
 import (
 	"bytes"
-	"fmt"
 	"image/png"
 	"log"
 	"strconv"
@@ -20,8 +19,10 @@ import (
 )
 
 type ClickerApp struct {
-	stream pb.GameService_PlayGameClient
-	player *pb.Player
+	stream  pb.GameService_PlayGameClient
+	fyneApp fyne.App
+	mainWin fyne.Window
+	player  *pb.Player
 
 	enemyName      binding.String
 	enemyCurrentHp binding.Float
@@ -36,12 +37,15 @@ type ClickerApp struct {
 	weaponName   binding.String
 	weaponDamage binding.Float
 	weaponLevel  binding.Int
+
+	otherPlayers binding.StringList
 }
 
 func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *ClickerApp {
-	return &ClickerApp{
-		stream: stream,
-		player: player,
+	a := &ClickerApp{
+		stream:  stream,
+		player:  player,
+		fyneApp: app.New(),
 
 		enemyName:      binding.NewString(),
 		enemyCurrentHp: binding.NewFloat(),
@@ -56,179 +60,197 @@ func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *Cli
 		weaponName:   binding.NewString(),
 		weaponDamage: binding.NewFloat(),
 		weaponLevel:  binding.NewInt(),
+
+		otherPlayers: binding.NewStringList(),
 	}
+	a.mainWin = a.fyneApp.NewWindow("Clicker")
+	return a
 }
 
 func (a *ClickerApp) Run() {
 	err := a.stream.Send(&pb.ClientToServer{
-		Event: &pb.ClientToServer_SelfInfo{
-			SelfInfo: a.player,
-		},
+		Event: &pb.ClientToServer_SelfInfo{SelfInfo: a.player},
 	})
 	if err != nil {
-		log.Fatalf("Could not send self info to server: %v", err)
+		log.Fatalf("Could not send self info: %v", err)
 	}
 	log.Println("Sent self info to server")
 
-	go func() {
-		for {
-			in, err := a.stream.Recv()
-			if err != nil {
-				log.Printf("Failed to receive from stream: %v", err)
-				return
-			}
+	go a.listenForServerUpdates()
 
-			switch event := in.GetEvent().(type) {
-
-			case *pb.ServerToClient_GameStateUpdate:
-				update := event.GameStateUpdate
-				log.Printf("GAME STATE UPDATE: Boss HP = %.2f, ID = %s", update.GetEnemyCurrentHp(), update.GetEnemyId())
-				a.enemyCurrentHp.Set(update.GetEnemyCurrentHp())
-
-			case *pb.ServerToClient_InitialState:
-				initState := event.InitialState
-				log.Printf("INITIAL STATE: Boss Name = %s, HP = %.2f / %.2f", initState.GetEnemy().Name, initState.GetEnemy().GetCurrentHp(), initState.GetEnemy().GetMaxHp())
-				a.enemyName.Set(initState.GetEnemy().GetName())
-				a.enemyCurrentHp.Set(initState.GetEnemy().GetCurrentHp())
-				a.enemyMaxHp.Set(initState.GetEnemy().GetMaxHp())
-				a.enemyImage.Set(initState.GetEnemy().GetImage())
-
-			case *pb.ServerToClient_EnemySpawned:
-				newEnemy := event.EnemySpawned
-				log.Printf("NEW ENEMY SPAWNED: Boss Name = %s, HP = %.2f, Level = %d", newEnemy.GetEnemy().GetName(), newEnemy.GetEnemy().GetMaxHp(), newEnemy.GetEnemy().GetLevel())
-				a.enemyName.Set(newEnemy.GetEnemy().GetName())
-				a.enemyCurrentHp.Set(newEnemy.GetEnemy().GetMaxHp())
-				a.enemyMaxHp.Set(newEnemy.GetEnemy().GetMaxHp())
-				a.enemyImage.Set(newEnemy.GetEnemy().GetImage())
-
-			case *pb.ServerToClient_PlayerStateUpdate:
-				playerStateUpdate := event.PlayerStateUpdate
-				playerStats := playerStateUpdate.GetPlayer().GetStats()
-				log.Printf("PLAYER STATE UPDATE: Level=%d, Exp=%d, ExpToNextLevel=%d, Gold=%d", playerStats.GetLevel(), playerStats.GetExperience(), playerStats.GetNextLevelExp(), playerStateUpdate.GetPlayer().GetResources().GetGold())
-
-				a.playerExp.Set(int(playerStats.GetExperience()))
-				a.playerExpToNextLevel.Set(int(playerStats.GetNextLevelExp()))
-				a.playerGold.Set(int(playerStateUpdate.GetPlayer().GetResources().GetGold()))
-				a.playerLevel.Set(int(playerStats.GetLevel()))
-
-			default:
-				log.Printf("Received an unknown event type: %T", event)
-			}
-		}
-	}()
-
-	fyneApp := app.New()
-	w := fyneApp.NewWindow("clicker")
-	w.Resize(fyne.NewSize(600, 400))
-
-	attackButton := widget.NewButton("Attack", func() {
-		log.Println("Attacking now!")
-
-		err := a.stream.Send(&pb.ClientToServer{
-			Event: &pb.ClientToServer_Attack{
-				Attack: &pb.AttackAction{},
-			},
-		})
-		if err != nil {
-			log.Printf("Could not send attack: %v", err)
-		}
-	})
-
-	enemyNameLabel := widget.NewLabelWithData(a.enemyName)
-
-	enemyHpBar := widget.NewProgressBar()
-
-	enemyHpLabel := widget.NewLabel("")
-	enemyHpLabel.Alignment = fyne.TextAlignCenter
-
-	canvasImage := &canvas.Image{}
-	canvasImage.FillMode = canvas.ImageFillOriginal
-	canvasImage.SetMinSize(fyne.NewSize(256, 256))
-
-	imageListener := binding.NewDataListener(func() {
-		imageBytes, err := a.enemyImage.Get()
-		if err != nil || len(imageBytes) == 0 {
-			return
-		}
-
-		go func() {
-			log.Println("Decoding image")
-			img, err := png.Decode(bytes.NewReader(imageBytes))
-			if err != nil {
-				log.Printf("Failed to decode image: %v", err)
-				return
-			}
-			log.Println("Image decoded successfully")
-
-			fyne.Do(func() {
-				log.Println("Updating image on main thread")
-				canvasImage.Image = img
-				canvasImage.Refresh()
-			})
-		}()
-	})
-	a.enemyImage.AddListener(imageListener)
-
-	hpListener := binding.NewDataListener(func() {
-		current, errCurrent := a.enemyCurrentHp.Get()
-		max, errMax := a.enemyMaxHp.Get()
-
-		if errCurrent != nil || errMax != nil {
-			log.Printf("Error getting current/max hp values: \n%v\n%v", errCurrent, errMax)
-			return
-		}
-
-		hpText := fmt.Sprintf("%.0f / %.0f", current, max)
-		enemyHpLabel.SetText(hpText)
-
-		if max > 0 {
-			normalizedHp := current / max
-			enemyHpBar.SetValue(normalizedHp)
-		}
-	})
-
-	a.enemyCurrentHp.AddListener(hpListener)
-	a.enemyMaxHp.AddListener(hpListener)
-
-	enemyLayout := container.NewVBox(
-		container.NewCenter(enemyNameLabel),
-		container.NewCenter(canvasImage),
-		enemyHpLabel,
-		enemyHpBar,
-
-		layout.NewSpacer(),
-		attackButton,
-	)
-
-	w.SetContent(enemyLayout)
-
-	hpListener.DataChanged()
-	imageListener.DataChanged()
-
-	w.ShowAndRun()
+	a.mainWin.SetContent(a.createContent())
+	a.mainWin.Resize(fyne.NewSize(800, 600))
+	a.mainWin.ShowAndRun()
 	log.Println("Application shutting down")
 }
 
 func (a *ClickerApp) updatePlayerData(playerData *pb.Player) {
-	if res := playerData.GetResources(); res != nil {
-		a.playerGold.Set(int(res.GetGold()))
+	if playerData == nil {
+		return
 	}
-
-	if stats := playerData.GetStats(); stats != nil {
-		a.playerLevel.Set(int(stats.GetLevel()))
-		a.playerExp.Set(int(stats.GetExperience()))
-		a.playerExpToNextLevel.Set(int(stats.GetNextLevelExp()))
+	a.playerGold.Set(int(playerData.GetResources().GetGold()))
+	a.playerLevel.Set(int(playerData.GetStats().GetLevel()))
+	a.playerExp.Set(int(playerData.GetStats().GetExperience()))
+	a.playerExpToNextLevel.Set(int(playerData.GetStats().GetNextLevelExp()))
+	if weapon := playerData.GetEquipment().GetWeapon(); weapon != nil {
+		a.weaponName.Set(weapon.GetName())
+		a.weaponLevel.Set(int(weapon.GetLevel()))
+		damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
+		a.weaponDamage.Set(float64(damage))
 	}
+}
 
-	if equip := playerData.GetEquipment(); equip != nil {
-		if weapon := equip.GetWeapon(); weapon != nil {
-			a.weaponName.Set(weapon.GetName())
-			a.weaponLevel.Set(int(weapon.GetLevel()))
+func (a *ClickerApp) updateEnemyData(enemyData *pb.Enemy) {
+	if enemyData == nil {
+		return
+	}
+	a.enemyName.Set(enemyData.GetName())
+	a.enemyCurrentHp.Set(enemyData.GetCurrentHp())
+	a.enemyMaxHp.Set(enemyData.GetMaxHp())
+	a.enemyImage.Set(enemyData.GetImage())
+}
 
-			damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
-			a.weaponDamage.Set(float64(damage))
+func (a *ClickerApp) listenForServerUpdates() {
+	for {
+		in, err := a.stream.Recv()
+		if err != nil {
+			log.Printf("Failed to receive from stream: %v", err)
+			return
 		}
+
+		fyne.Do(func() {
+			switch event := in.GetEvent().(type) {
+
+			case *pb.ServerToClient_Welcome:
+				playerData := event.Welcome.GetPlayer()
+				log.Printf("WELCOME! I am %s with ID %s", playerData.GetName(), playerData.GetId())
+				a.player = playerData
+				a.updatePlayerData(playerData)
+
+			case *pb.ServerToClient_InitialState:
+				initState := event.InitialState
+				log.Printf("INITIAL STATE: Got enemy and %d players.", len(initState.GetPlayers()))
+				a.updateEnemyData(initState.GetEnemy())
+
+				var otherPlayerNames []string
+				for _, p := range initState.GetPlayers() {
+					if p.GetId() != a.player.GetId() {
+						otherPlayerNames = append(otherPlayerNames, p.GetName())
+					}
+				}
+				a.otherPlayers.Set(otherPlayerNames)
+
+			case *pb.ServerToClient_PlayerStateUpdate:
+				playerData := event.PlayerStateUpdate.GetPlayer()
+				if playerData.GetId() == a.player.GetId() {
+					log.Printf("My state updated: Gold=%d, Lvl=%d", playerData.GetResources().GetGold(), playerData.GetStats().GetLevel())
+					a.updatePlayerData(playerData)
+				}
+
+			case *pb.ServerToClient_PlayerJoined:
+				newPlayer := event.PlayerJoined.GetPlayer()
+				log.Printf("Player %s joined the game", newPlayer.GetName())
+				a.otherPlayers.Append(newPlayer.GetName())
+
+			case *pb.ServerToClient_PlayerLeft:
+				leftPlayerID := event.PlayerLeft.GetPlayerId()
+				log.Printf("Player with ID %s left the game", leftPlayerID)
+				// TODO: delete by id, not name
+
+			case *pb.ServerToClient_GameStateUpdate:
+				update := event.GameStateUpdate
+				a.enemyCurrentHp.Set(update.GetEnemyCurrentHp())
+
+			case *pb.ServerToClient_EnemySpawned:
+				newEnemy := event.EnemySpawned.GetEnemy()
+				a.updateEnemyData(newEnemy)
+
+			default:
+				log.Printf("Received an unknown event type: %T", event)
+			}
+		})
 	}
+}
+
+func (a *ClickerApp) createContent() fyne.CanvasObject {
+	enemyNameLabel := widget.NewLabelWithData(a.enemyName)
+	enemyHpBar := widget.NewProgressBar()
+	a.enemyCurrentHp.AddListener(binding.NewDataListener(func() {
+		cur, _ := a.enemyCurrentHp.Get()
+		max, _ := a.enemyMaxHp.Get()
+		if max > 0 {
+			enemyHpBar.SetValue(cur / max)
+		}
+	}))
+	enemyImage := &canvas.Image{FillMode: canvas.ImageFillContain}
+	enemyImage.SetMinSize(fyne.NewSize(256, 256))
+	a.enemyImage.AddListener(binding.NewDataListener(func() {
+		enemyImageBytes, _ := a.enemyImage.Get()
+		if len(enemyImageBytes) == 0 {
+			return
+		}
+		go func() {
+			img, _ := png.Decode(bytes.NewReader(enemyImageBytes))
+			fyne.Do(func() { enemyImage.Image = img; enemyImage.Refresh() })
+		}()
+	}))
+	attackButton := widget.NewButton("Attack", func() {
+		a.stream.Send(&pb.ClientToServer{Event: &pb.ClientToServer_Attack{Attack: &pb.AttackAction{}}})
+	})
+
+	enemyBox := container.NewVBox(
+		container.NewCenter(enemyNameLabel),
+		container.NewCenter(enemyImage),
+		enemyHpBar,
+		layout.NewSpacer(),
+		attackButton,
+	)
+
+	playerGoldLabel := widget.NewLabelWithData(binding.IntToStringWithFormat(a.playerGold, "Золото: %d"))
+	playerLevelLabel := widget.NewLabelWithData(binding.IntToStringWithFormat(a.playerLevel, "Уровень: %d"))
+	playerExpBar := widget.NewProgressBar()
+	a.playerExp.AddListener(binding.NewDataListener(func() {
+		cur, _ := a.playerExp.Get()
+		next, _ := a.playerExpToNextLevel.Get()
+		if next > 0 {
+			playerExpBar.SetValue(float64(cur) / float64(next))
+		}
+	}))
+	weaponNameLabel := widget.NewLabelWithData(a.weaponName)
+	weaponStatsLabel := widget.NewLabelWithData(binding.FloatToStringWithFormat(a.weaponDamage, "Урон: %.1f"))
+	upgradeWeaponButton := widget.NewButton("Улучшить", func() {
+		a.stream.Send(&pb.ClientToServer{Event: &pb.ClientToServer_UpgradeWeapon{UpgradeWeapon: &pb.UpgradeWeaponRequest{}}})
+	})
+
+	playerBox := container.NewVBox(
+		widget.NewLabelWithStyle("Персонаж", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		playerGoldLabel,
+		playerLevelLabel,
+		playerExpBar,
+		container.NewHSplit(container.NewVBox(weaponNameLabel, weaponStatsLabel), upgradeWeaponButton),
+	)
+
+	othersList := widget.NewListWithData(
+		a.otherPlayers,
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(i binding.DataItem, o fyne.CanvasObject) {
+			o.(*widget.Label).Bind(i.(binding.String))
+		},
+	)
+
+	othersBox := container.NewBorder(
+		widget.NewLabelWithStyle("Онлайн", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		nil, nil, nil,
+		othersList,
+	)
+
+	leftPanel := container.NewVSplit(playerBox, othersBox)
+	leftPanel.Offset = 0.6
+
+	mainLayout := container.NewHSplit(leftPanel, enemyBox)
+	mainLayout.Offset = 0.3
+
+	return mainLayout
 }
 
 func BindingStrToFloat64(s binding.String) float64 {

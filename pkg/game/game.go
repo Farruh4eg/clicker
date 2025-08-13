@@ -79,8 +79,22 @@ func (g *Game) RemovePlayer(playerID string) {
 	}
 }
 
-func (g *Game) broadcast(msg *pb.ServerToClient) {
+func (g *Game) broadcastToAll(msg *pb.ServerToClient) {
 	for _, session := range g.Players {
+		select {
+		case session.Updates <- msg:
+		default:
+			log.Printf("Player %s update channel is full. Message dropped", session.Data.GetId())
+		}
+	}
+}
+
+func (g *Game) Broadcast(msg *pb.ServerToClient, excludePlayerID string) {
+	for id, session := range g.Players {
+		if id == excludePlayerID {
+			continue
+		}
+
 		select {
 		case session.Updates <- msg:
 		default:
@@ -97,6 +111,61 @@ func (g *Game) sendToPlayer(playerID string, msg *pb.ServerToClient) {
 			log.Printf("Player %s update channel is full. Message dropped", session.Data.GetId())
 		}
 	}
+}
+
+func (e *Enemy) ToProto() *pb.Enemy {
+	return &pb.Enemy{
+		Id:        e.ID,
+		Name:      e.Name,
+		MaxHp:     e.MaxHealth,
+		CurrentHp: e.CurrentHealth,
+		Level:     e.Level,
+		Image:     e.Image,
+	}
+}
+
+func InitializePlayer(name string) *pb.Player {
+	player := &pb.Player{
+		Id:   GenerateID(),
+		Name: name,
+		Stats: &pb.PlayerStats{
+			Level:        1,
+			Experience:   0,
+			NextLevelExp: 100,
+		},
+		Resources: &pb.PlayerResources{
+			Gold: 2,
+		},
+		Equipment: &pb.PlayerEquipment{
+			Weapon: &pb.Weapon{
+				ItemId:       "starter_stick",
+				Name:         "Деревянная палка",
+				Level:        1,
+				BaseDamage:   5.0,
+				DamageGrowth: 2.0,
+			},
+		},
+	}
+	return player
+}
+
+func (g *Game) GetCurrentEnemy() *Enemy {
+	g.Lock()
+	defer g.Unlock()
+	if len(g.Enemies) == 0 {
+		return nil
+	}
+	return g.Enemies[0]
+}
+
+func (g *Game) GetAllPlayers() []*pb.Player {
+	g.Lock()
+	defer g.Unlock()
+	players := make([]*pb.Player, 0, len(g.Players))
+	for _, session := range g.Players {
+		players = append(players, session.Data)
+	}
+	return players
 }
 
 func NewGame() *Game {
@@ -127,7 +196,7 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 			AttackerId:  attackerID,
 		}
 
-		g.broadcast(&pb.ServerToClient{
+		g.broadcastToAll(&pb.ServerToClient{
 			Event: &pb.ServerToClient_GameStateUpdate{
 				GameStateUpdate: &pb.GameStateUpdate{
 					EnemyCurrentHp: enemy.CurrentHealth,
@@ -176,7 +245,7 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 	g.Enemies = g.Enemies[1:]
 	if len(g.Enemies) == 0 {
 		log.Println("All enemies have been defeated")
-		g.broadcast(&pb.ServerToClient{
+		g.broadcastToAll(&pb.ServerToClient{
 			// TODO: add new field to proto for this case?
 			Event: &pb.ServerToClient_GameStateUpdate{
 				GameStateUpdate: &pb.GameStateUpdate{
@@ -200,7 +269,7 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 		Image:     newEnemy.Image,
 	}
 
-	g.broadcast(&pb.ServerToClient{
+	g.broadcastToAll(&pb.ServerToClient{
 		Event: &pb.ServerToClient_EnemySpawned{
 			EnemySpawned: &pb.NewEnemySpawned{
 				Enemy: pbEnemy,
