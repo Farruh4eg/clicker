@@ -105,6 +105,10 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 			// ID not used yet, hence it being empty
 			gs.game.ApplyDamage("", float64(damage), player.GetId())
 
+		case *pb.ClientToServer_UpgradeWeapon:
+			log.Printf("Player %s requested a weapon upgrade\n", player.GetName())
+			gs.game.UpgradeWeapon(player.GetId())
+
 		default:
 			log.Printf("Received unhandled event type %T from player %s", event, player.GetId())
 		}

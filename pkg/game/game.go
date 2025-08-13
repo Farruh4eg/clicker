@@ -53,6 +53,9 @@ const (
 	BaseExpPerKill             = 5
 	LastHitGoldBonusMultiplier = 1.5
 	LastHitExpBonusMultiplier  = 2.0
+
+	WeaponUpgradeBaseCost       = 50
+	WeaponUpgradeCostMultiplier = 1.8
 )
 
 func (g *Game) AddPlayer(player *pb.Player, updateChan chan *pb.ServerToClient) {
@@ -201,6 +204,42 @@ func (g *Game) ApplyDamage(enemyID string, incomingDamage float64, attackerID st
 		Event: &pb.ServerToClient_EnemySpawned{
 			EnemySpawned: &pb.NewEnemySpawned{
 				Enemy: pbEnemy,
+			},
+		},
+	})
+}
+
+func (g *Game) UpgradeWeapon(playerID string) {
+	g.Lock()
+	defer g.Unlock()
+
+	session, ok := g.Players[playerID]
+	if !ok {
+		log.Printf("Attempted to upgrade weapon for a non-existent player3: %s\n", playerID)
+		return
+	}
+
+	player := session.Data
+	weapon := player.GetEquipment().GetWeapon()
+
+	upgradeCost := int64(float64(WeaponUpgradeBaseCost) * math.Pow(WeaponUpgradeCostMultiplier, float64(weapon.GetLevel()-1)))
+
+	if player.GetResources().GetGold() < upgradeCost {
+		log.Printf("Player %s has not enough gold to upgrade weapon. Needs %d, has %d\n", player.GetName(), upgradeCost, player.GetResources().GetGold())
+
+		// TODO: send INSUFFICIENT GOLD message to player
+		return
+	}
+
+	player.Resources.Gold -= upgradeCost
+	weapon.Level++
+
+	log.Printf("Player %s upgraded '%s' to level %d for %d gold\n", player.GetName(), weapon.GetName(), weapon.GetLevel(), upgradeCost)
+
+	g.sendToPlayer(playerID, &pb.ServerToClient{
+		Event: &pb.ServerToClient_PlayerStateUpdate{
+			PlayerStateUpdate: &pb.PlayerStateUpdate{
+				Player: player,
 			},
 		},
 	})

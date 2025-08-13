@@ -61,7 +61,9 @@ func NewClickerApp(stream pb.GameService_PlayGameClient, player *pb.Player) *Cli
 
 func (a *ClickerApp) Run() {
 	err := a.stream.Send(&pb.ClientToServer{
-		SelfInfo: a.player,
+		Event: &pb.ClientToServer_SelfInfo{
+			SelfInfo: a.player,
+		},
 	})
 	if err != nil {
 		log.Fatalf("Could not send self info to server: %v", err)
@@ -98,6 +100,16 @@ func (a *ClickerApp) Run() {
 				a.enemyCurrentHp.Set(newEnemy.GetEnemy().GetMaxHp())
 				a.enemyMaxHp.Set(newEnemy.GetEnemy().GetMaxHp())
 				a.enemyImage.Set(newEnemy.GetEnemy().GetImage())
+
+			case *pb.ServerToClient_PlayerStateUpdate:
+				playerStateUpdate := event.PlayerStateUpdate
+				playerStats := playerStateUpdate.GetPlayer().GetStats()
+				log.Printf("PLAYER STATE UPDATE: Level=%d, Exp=%d, ExpToNextLevel=%d, Gold=%d", playerStats.GetLevel(), playerStats.GetExperience(), playerStats.GetNextLevelExp(), playerStateUpdate.GetPlayer().GetResources().GetGold())
+
+				a.playerExp.Set(int(playerStats.GetExperience()))
+				a.playerExpToNextLevel.Set(int(playerStats.GetNextLevelExp()))
+				a.playerGold.Set(int(playerStateUpdate.GetPlayer().GetResources().GetGold()))
+				a.playerLevel.Set(int(playerStats.GetLevel()))
 
 			default:
 				log.Printf("Received an unknown event type: %T", event)
@@ -195,6 +207,28 @@ func (a *ClickerApp) Run() {
 
 	w.ShowAndRun()
 	log.Println("Application shutting down")
+}
+
+func (a *ClickerApp) updatePlayerData(playerData *pb.Player) {
+	if res := playerData.GetResources(); res != nil {
+		a.playerGold.Set(int(res.GetGold()))
+	}
+
+	if stats := playerData.GetStats(); stats != nil {
+		a.playerLevel.Set(int(stats.GetLevel()))
+		a.playerExp.Set(int(stats.GetExperience()))
+		a.playerExpToNextLevel.Set(int(stats.GetNextLevelExp()))
+	}
+
+	if equip := playerData.GetEquipment(); equip != nil {
+		if weapon := equip.GetWeapon(); weapon != nil {
+			a.weaponName.Set(weapon.GetName())
+			a.weaponLevel.Set(int(weapon.GetLevel()))
+
+			damage := weapon.GetBaseDamage() + weapon.GetDamageGrowth()*float32(weapon.GetLevel()-1)
+			a.weaponDamage.Set(float64(damage))
+		}
+	}
 }
 
 func BindingStrToFloat64(s binding.String) float64 {
