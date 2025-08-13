@@ -54,7 +54,7 @@ func (gs *GameServer) PlayGame(stream pb.GameService_PlayGameServer) error {
 
 	updatesChan := make(chan *pb.ServerToClient, 10)
 
-	gs.game.AddPlayer(player.GetId(), updatesChan)
+	gs.game.AddPlayer(player, updatesChan)
 	defer func() {
 		gs.game.RemovePlayer(player.GetId())
 		log.Printf("Player with ID = %s removed from the game", player.GetId())

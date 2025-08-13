@@ -53,12 +53,14 @@ message Enemy {
 }
 
 message ClientToServer {
-  optional Player self_info = 1;
-
   oneof event {
+    Player self_info = 1;
     AttackAction attack = 2;
+    UpgradeWeaponRequest upgrade_weapon = 3;
   }
 }
+
+message UpgradeWeaponRequest {}
 
 message AttackAction {
   // TODO: maybe something additional?
